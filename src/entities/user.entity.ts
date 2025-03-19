@@ -1,6 +1,7 @@
 /** @format */
 
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, PrimaryGeneratedColumn, OneToMany } from "typeorm";
+import { BetEntity } from './bet.entity';
 import { CoreEntity } from "./core.entity";
 
 @Entity({ name: "user" })
@@ -14,6 +15,9 @@ export class UserEntity extends CoreEntity {
   @Column({ name: "hashed_password" })
   hashedPassword: string;
 
-  @Column({ type: "enum", enum: ["user", "admin"], default: "user" })
-  role: string;
+  @Column({ default: 1000 })
+    balance: number;
+
+  @OneToMany(() => BetEntity, (bet) => bet.user)
+  bets: BetEntity[];
 }

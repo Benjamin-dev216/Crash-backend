@@ -25,7 +25,6 @@ const signUpHandler = async (req: Request, res: Response) => {
   if (newUser) {
     res.status(201).json({
       token: token,
-      isAdmin: newUser.role === "admin",
       username: newUser.name,
     });
   } else {
@@ -54,7 +53,6 @@ const signInHandler = async (req: Request, res: Response) => {
 
   res.status(200).json({
     token: token,
-    isAdmin: user.role === "admin",
     username: user.name,
   });
 };

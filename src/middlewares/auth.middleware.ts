@@ -8,7 +8,6 @@ export const authMiddleware = async(
   req: Request,
   res: Response,
   next: NextFunction,
-  requireAdmin: boolean=false
 ) => {
   const token = req.header("Authorization")? req.header("Authorization").replace("Bearer ", ""): null;
 
@@ -23,11 +22,6 @@ export const authMiddleware = async(
     const user = await authService.getUser(decoded);
 
     if (!user) throw "User Not Found!";
-
-    if (requireAdmin && user.role !== "admin") {
-      res.status(403).json({ error: "Forbidden user!" });
-      return;
-    }
 
     next();
   } catch (err) {
