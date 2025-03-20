@@ -8,7 +8,7 @@ const activeBets = new Map<string, BetEntity>(); // Track active bets in memory
 export const setupSocket = (server: any) => {
   const io = new Server(server, {
     cors: {
-      origin: "http://localhost:3000",
+      origin: "http://localhost:5173",
       methods: ["GET", "POST"],
     },
   });

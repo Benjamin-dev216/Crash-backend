@@ -8,26 +8,32 @@ let currentRoundBets: BetEntity[] = []; // Track bets for the current round
 let startPendingFlag = false;
 
 export const startGame = async (io: Server) => {
-  // Reset the betting user list for the new round
   clearInterval(gameInterval); // Ensure no duplicate intervals
 
-  const crashPoint = Math.floor(Math.random() * 10) + 1; // Random crash point between 1x and 10x
+  const crashPoint = Math.floor(Math.random() * 20) + 1; // Random crash point between 1x and 10x
   io.emit("gameStart", { crashPoint });
 
   let multiplier = 1;
-  let increasement = 0.1;
+  let timeElapsed = 0;
+  let rate = 0.05;
+  const updateInterval = 50; // Update every 50ms
 
   gameInterval = setInterval(() => {
-    multiplier += increasement;
+    timeElapsed += updateInterval / 1000; // Convert to seconds
+
+    // Slow down the increase of the rate but keep it capped
+    rate = 0.05 + Math.min(timeElapsed * 0.005, 0.15);
+
+    // Exponential multiplier increase
+    multiplier = 1 * Math.pow(Math.E, rate * timeElapsed);
+
     io.emit("multiplierUpdate", { multiplier });
 
     if (multiplier >= crashPoint) {
       clearInterval(gameInterval);
       endGame(crashPoint, io);
     }
-
-    increasement *= 1.1;
-  }, 50); // Update every 50ms
+  }, updateInterval); // Update every 50ms
 };
 
 const endGame = async (crashPoint: number, io: Server) => {

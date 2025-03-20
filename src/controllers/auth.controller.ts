@@ -8,19 +8,18 @@ import "dotenv/config";
 import { errorHandlerWrapper } from "@/utils";
 
 const signUpHandler = async (req: Request, res: Response) => {
-  const { name, password } = req.body;
+  const { username, password } = req.body;
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
   const newUser = await authService.createUser({
-    name,
+    name: username,
     hashedPassword,
   });
 
-  const token = jwt.sign({ username: newUser.name }, process.env.JWT_SECRET, {
+  const token = jwt.sign({ username }, process.env.JWT_SECRET, {
     expiresIn: "24h",
   });
-
 
   if (newUser) {
     res.status(201).json({
@@ -33,9 +32,9 @@ const signUpHandler = async (req: Request, res: Response) => {
 };
 
 const signInHandler = async (req: Request, res: Response) => {
-  const { name, password } = req.body;
+  const { username, password } = req.body;
 
-  const user = await authService.getUser({ name });
+  const user = await authService.getUser({ name: username });
 
   if (!user) {
     res.status(409).json({ meesaage: "User not found" });
