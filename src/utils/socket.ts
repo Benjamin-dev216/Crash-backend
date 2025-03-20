@@ -12,46 +12,99 @@ export const setupSocket = (server: any) => {
   });
 
   io.on("connection", (socket) => {
-    console.log("A user connected");
+    console.log("A user connected:", socket.id);
 
+    // Handle placing a bet
     socket.on("placeBet", async (data: any) => {
-      const { userId, amount } = data;
-      const betRepository = AppDataSource.getRepository(BetEntity);
-      const userRepository = AppDataSource.getRepository(UserEntity);
+      try {
+        const { userId, amount } = data;
 
-      const user = await userRepository.findOne({ where: { uuid: userId } });
-      if (user) {
+        if (!userId || !amount || amount <= 0) {
+          return socket.emit("error", { message: "Invalid bet data" });
+        }
+
+        const betRepository = AppDataSource.getRepository(BetEntity);
+        const userRepository = AppDataSource.getRepository(UserEntity);
+
+        const user = await userRepository.findOne({ where: { uuid: userId } });
+        if (!user) {
+          return socket.emit("error", { message: "User not found" });
+        }
+
+        // Ensure the user has enough balance
+        if (user.balance < amount) {
+          return socket.emit("error", { message: "Insufficient balance" });
+        }
+
+        // Deduct balance before saving the bet
+        user.balance -= amount;
+
         const bet = new BetEntity();
         bet.user = user;
         bet.amount = amount;
-        addBetToCurrentRound(bet, io, false);
+        bet.result = "pending"; // Default status
+
         await betRepository.save(bet);
-        console.log(`Bet placed: ${amount}`);
+        await userRepository.save(user);
+
+        // Add bet to the current round after saving
+        addBetToCurrentRound(bet, io, false);
+        console.log(`Bet placed: ${amount} by User: ${userId}`);
+
+        socket.emit("betConfirmed", {
+          message: "Bet placed successfully",
+          bet,
+        });
+      } catch (error) {
+        console.error("Error in placeBet:", error);
+        socket.emit("error", { message: "Internal server error" });
       }
     });
 
+    // Handle cashout
     socket.on("cashout", async (data: any) => {
-      const { userId, multiplier } = data;
-      const betRepository = AppDataSource.getRepository(BetEntity);
-      const userRepository = AppDataSource.getRepository(UserEntity);
+      try {
+        const { userId, multiplier } = data;
 
-      const bet = await betRepository.findOne({
-        where: { user: { uuid: userId }, result: "pending" },
-        relations: ["user"],
-      });
-      if (bet) {
+        if (!userId || !multiplier || multiplier <= 1) {
+          return socket.emit("error", { message: "Invalid cashout data" });
+        }
+
+        const betRepository = AppDataSource.getRepository(BetEntity);
+        const userRepository = AppDataSource.getRepository(UserEntity);
+
+        // Find the pending bet for the user
+        const bet = await betRepository.findOne({
+          where: { user: { uuid: userId }, result: "pending" },
+          relations: ["user"],
+        });
+
+        if (!bet) {
+          return socket.emit("error", { message: "No active bet found" });
+        }
+
+        // Check if cashout is valid before applying changes
         bet.cashoutAt = multiplier;
         bet.result = "win";
-        bet.user.balance += bet.amount * multiplier;
-        addBetToCurrentRound(bet, io, true);
+        bet.user.balance += bet.amount * multiplier; // Apply winnings
+
         await betRepository.save(bet);
         await userRepository.save(bet.user);
-        console.log(`User cashed out at ${multiplier}x`);
+
+        // Notify other users
+        addBetToCurrentRound(bet, io, true);
+        console.log(`User ${userId} cashed out at ${multiplier}x`);
+
+        socket.emit("cashoutConfirmed", { message: "Cashout successful", bet });
+      } catch (error) {
+        console.error("Error in cashout:", error);
+        socket.emit("error", { message: "Internal server error" });
       }
     });
 
+    // Handle disconnection
     socket.on("disconnect", () => {
-      console.log("User disconnected");
+      console.log("User disconnected:", socket.id);
     });
   });
 

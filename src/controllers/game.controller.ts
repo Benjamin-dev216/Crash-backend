@@ -1,18 +1,22 @@
 import { BetEntity, UserEntity } from "@/entities";
 import { AppDataSource } from "@/setup/datasource";
+import { Request, Response, NextFunction } from "express";
+import { Server } from "socket.io";
 
 let gameInterval: NodeJS.Timeout;
 let currentRoundBets: BetEntity[] = []; // Track bets for the current round
 let startPendingFlag = false;
 
-export const startGame = async (io: any) => {
+export const startGame = async (io: Server) => {
   // Reset the betting user list for the new round
+  clearInterval(gameInterval); // Ensure no duplicate intervals
 
   const crashPoint = Math.floor(Math.random() * 10) + 1; // Random crash point between 1x and 10x
   io.emit("gameStart", { crashPoint });
 
   let multiplier = 1;
   let increasement = 0.1;
+
   gameInterval = setInterval(() => {
     multiplier += increasement;
     io.emit("multiplierUpdate", { multiplier });
@@ -21,85 +25,132 @@ export const startGame = async (io: any) => {
       clearInterval(gameInterval);
       endGame(crashPoint, io);
     }
+
     increasement *= 1.1;
-  }, 50); // Update every second
+  }, 50); // Update every 50ms
 };
 
-const endGame = async (crashPoint: number, io: any) => {
+const endGame = async (crashPoint: number, io: Server) => {
   io.emit("gameEnd", { crashPoint });
 
   const betRepository = AppDataSource.getRepository(BetEntity);
   const userRepository = AppDataSource.getRepository(UserEntity);
 
-  // Process bets for the current round
-  for (const bet of currentRoundBets) {
-    if (bet.cashoutAt && bet.cashoutAt <= crashPoint) {
-      bet.result = "win";
-      bet.user.balance += bet.amount * bet.cashoutAt;
-    } else {
-      bet.result = "lose";
+  try {
+    // Process bets for the current round
+    for (const bet of currentRoundBets) {
+      if (bet.cashoutAt && bet.cashoutAt <= crashPoint) {
+        bet.result = "win";
+        bet.user.balance += bet.amount * bet.cashoutAt;
+        bet.crash = crashPoint;
+      } else {
+        bet.result = "lose";
+      }
+      await betRepository.save(bet);
+      await userRepository.save(bet.user);
     }
-    await betRepository.save(bet);
-    await userRepository.save(bet.user);
-  }
 
-  // Emit the final user list for the round
-  emitUserList(io);
-
-  // Delay until next round
-  setTimeout(async () => {
-    // Fetch list of previouse bets
-    const result = await betRepository.find({
-      where: { currentFlag: true },
-      relations: ["user"],
-      order: { amount: "DESC" },
-    });
-
-    currentRoundBets = [...result];
-
-    result.map((item) => {
-      item.currentFlag = false;
-    });
-    betRepository.save(result);
-
+    // Emit the final user list for the round
     emitUserList(io);
-  }, 1000);
 
-  // Start the next game after 7 seconds
-  startPendingFlag = true;
-  setTimeout(() => {
-    startPendingFlag = false;
-  }, 6000);
-  setTimeout(() => {
-    startGame(io);
-  }, 1000);
+    // Delay before fetching previous bets
+    setTimeout(async () => {
+      currentRoundBets = [];
+
+      try {
+        // Fetch list of previous bets
+        const result = await betRepository.find({
+          where: { currentFlag: true },
+          relations: ["user"],
+          order: { amount: "DESC" },
+        });
+
+        // Mark previous bets as completed
+        result.forEach((item) => (item.currentFlag = false));
+        await betRepository.save(result);
+
+        currentRoundBets = [...result];
+
+        emitUserList(io);
+      } catch (error) {
+        console.error("Error fetching previous bets:", error);
+      }
+    }, 1000);
+
+    // Start the next game after 7 seconds
+    startPendingFlag = true;
+    setTimeout(() => {
+      startPendingFlag = false;
+    }, 6000);
+
+    setTimeout(() => {
+      startGame(io);
+    }, 1000);
+  } catch (error) {
+    console.error("Error in endGame:", error);
+  }
 };
 
 export const addBetToCurrentRound = async (
   bet: BetEntity,
-  io: any,
+  io: Server,
   winningFlag: boolean
 ) => {
   const betRepository = AppDataSource.getRepository(BetEntity);
-  if (startPendingFlag) {
-    bet.currentFlag = false;
-    betRepository.save(bet);
-    currentRoundBets = [...currentRoundBets, bet];
-    currentRoundBets.sort((a, b) => b.amount - a.amount);
-    emitUserList(io);
-  } else {
-    if (winningFlag)
-      currentRoundBets.map((item) => {
-        item.id === bet.id ? bet : item;
-      });
-    else return null;
-  }
 
-  // Emit the updated user list for the current round
-  emitUserList(io);
+  try {
+    if (startPendingFlag) {
+      bet.currentFlag = false;
+      await betRepository.save(bet);
+      currentRoundBets = [...currentRoundBets, bet].sort(
+        (a, b) => b.amount - a.amount
+      );
+    } else {
+      if (winningFlag) {
+        currentRoundBets = currentRoundBets.map((item) =>
+          item.id === bet.id ? bet : item
+        );
+      } else {
+        return null;
+      }
+    }
+
+    // Emit the updated user list for the current round
+    emitUserList(io);
+  } catch (error) {
+    console.error("Error adding bet to current round:", error);
+  }
 };
 
-export const emitUserList = async (io: any) => {
-  // Emit only the bets for the current round
+export const emitUserList = async (io: Server) => {
   io.emit("userList", currentRoundBets);
+};
+
+export const fetchHistory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const userId = String(req.query.userId);
+
+    if (!userId) {
+      res.status(400).json({ error: "User ID is required" });
+    }
+
+    const userRepository = AppDataSource.getRepository(UserEntity);
+    const user = await userRepository.findOne({
+      where: { uuid: userId },
+      relations: ["bets"],
+    });
+
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+    }
+
+    res.json(user);
+  } catch (error) {
+    console.error("Error fetching user history:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
 };

@@ -22,6 +22,9 @@ export class BetEntity extends CoreEntity {
   @Column({ default: "pending" })
   result: string;
 
+  @Column()
+  crash: number;
+
   @ManyToOne(() => UserEntity, (user) => user.bets)
   user: UserEntity;
 }
