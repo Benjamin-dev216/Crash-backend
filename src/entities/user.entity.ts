@@ -15,7 +15,7 @@ export class UserEntity extends CoreEntity {
   @Column({ name: "hashed_password" })
   hashedPassword: string;
 
-  @Column({ default: 1000 })
+  @Column({ type: "numeric", precision: 10, scale: 4, default: 1000 })
   balance: number;
 
   @OneToMany(() => BetEntity, (bet) => bet.user)

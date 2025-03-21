@@ -7,13 +7,13 @@ export class BetEntity extends CoreEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ type: "numeric", precision: 10, scale: 4 })
   amount: number;
 
-  @Column({ default: 1 })
+  @Column({ type: "numeric", precision: 10, scale: 4, default: 1 })
   multiplier: number;
 
-  @Column({ nullable: true })
+  @Column({ type: "numeric", precision: 10, scale: 4, nullable: true })
   cashoutAt: number;
 
   @Column({ default: true })
@@ -22,7 +22,7 @@ export class BetEntity extends CoreEntity {
   @Column({ default: "pending" })
   result: string;
 
-  @Column({ default: 0 })
+  @Column({ type: "numeric", precision: 10, scale: 4, default: 0 })
   crash: number;
 
   @ManyToOne(() => UserEntity, (user) => user.bets)

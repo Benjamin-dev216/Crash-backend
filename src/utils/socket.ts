@@ -3,7 +3,7 @@ import { AppDataSource } from "@/setup/datasource";
 import { BetEntity, UserEntity } from "@/entities";
 import { addBetToCurrentRound } from "@/controllers/game.controller";
 
-const activeBets = new Map<string, BetEntity>(); // Track active bets in memory
+const activeBets = new Map<string, BetEntity>();
 
 export const setupSocket = (server: any) => {
   const io = new Server(server, {
@@ -16,7 +16,6 @@ export const setupSocket = (server: any) => {
   io.on("connection", (socket) => {
     console.log(`User connected: ${socket.id}`);
 
-    // Handle placing a bet
     socket.on("placeBet", async (data: any) => {
       try {
         const { username, amount } = data;
@@ -37,11 +36,11 @@ export const setupSocket = (server: any) => {
           return socket.emit("error", { message: "Insufficient balance" });
         }
 
-        user.balance -= amount;
+        user.balance = parseFloat((user.balance - amount).toFixed(4));
 
         const bet = new BetEntity();
         bet.user = user;
-        bet.amount = amount;
+        bet.amount = parseFloat(amount.toFixed(4));
         bet.result = "pending";
         bet.crash = 0;
 
@@ -50,7 +49,6 @@ export const setupSocket = (server: any) => {
 
         addBetToCurrentRound(bet, io, false);
 
-        // Store active bet in memory
         activeBets.set(username, bet);
 
         console.log(`Bet placed: ${amount} by User: ${username}`);
@@ -64,7 +62,6 @@ export const setupSocket = (server: any) => {
       }
     });
 
-    // Handle cashout
     socket.on("cashout", async (data: any) => {
       try {
         const { username, multiplier } = data;
@@ -78,11 +75,14 @@ export const setupSocket = (server: any) => {
         if (!bet)
           return socket.emit("error", { message: "No active bet found" });
 
-        bet.cashoutAt = multiplier;
+        bet.cashoutAt = parseFloat(multiplier.toFixed(4));
         bet.result = "win";
-        bet.user.balance += bet.amount * multiplier;
+        bet.multiplier = multiplier;
+        bet.user.balance = parseFloat(
+          (bet.user.balance + bet.amount * multiplier).toFixed(4)
+        );
 
-        activeBets.delete(username); // Remove from memory
+        activeBets.delete(username);
 
         addBetToCurrentRound(bet, io, true);
 
@@ -94,19 +94,17 @@ export const setupSocket = (server: any) => {
       }
     });
 
-    // Handle disconnection and auto-lose bets
     socket.on("disconnect", () => {
       console.log(`User disconnected: ${socket.id}`);
 
       for (const [username, bet] of activeBets.entries()) {
-        bet.result = "lose"; // Mark as lost
-        activeBets.delete(username); // Remove from memory
+        bet.result = "lose";
+        activeBets.delete(username);
         console.log(`Auto-lost bet for disconnected user: ${username}`);
       }
     });
   });
 
-  // Background task to periodically save bets to the database
   setInterval(async () => {
     if (activeBets.size > 0) {
       const betRepository = AppDataSource.getRepository(BetEntity);
@@ -118,7 +116,7 @@ export const setupSocket = (server: any) => {
       }
       console.log("Batch saved bets to database.");
     }
-  }, 5000); // Every 5 seconds
+  }, 5000);
 
   return io;
 };

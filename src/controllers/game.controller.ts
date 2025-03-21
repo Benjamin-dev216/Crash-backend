@@ -8,24 +8,22 @@ let currentRoundBets: BetEntity[] = []; // Track bets for the current round
 let startPendingFlag = false;
 
 export const startGame = async (io: Server) => {
-  clearInterval(gameInterval); // Ensure no duplicate intervals
+  clearInterval(gameInterval);
 
-  const crashPoint = Math.floor(Math.random() * 20) + 1; // Random crash point between 1x and 10x
+  const crashPoint = parseFloat((Math.random() * 10 + 1).toFixed(4)); // Random crash point between 1x and 20x
   io.emit("gameStart", { crashPoint });
 
   let multiplier = 1;
   let timeElapsed = 0;
   let rate = 0.05;
-  const updateInterval = 50; // Update every 50ms
+  const updateInterval = 50;
 
   gameInterval = setInterval(() => {
-    timeElapsed += updateInterval / 1000; // Convert to seconds
-
-    // Slow down the increase of the rate but keep it capped
+    timeElapsed += updateInterval / 1000;
     rate = 0.05 + Math.min(timeElapsed * 0.005, 0.15);
-
-    // Exponential multiplier increase
-    multiplier = 1 * Math.pow(Math.E, rate * timeElapsed);
+    multiplier = parseFloat(
+      (1 * Math.pow(Math.E, rate * timeElapsed)).toFixed(4)
+    );
 
     io.emit("multiplierUpdate", { multiplier });
 
@@ -33,7 +31,7 @@ export const startGame = async (io: Server) => {
       clearInterval(gameInterval);
       endGame(crashPoint, io);
     }
-  }, updateInterval); // Update every 50ms
+  }, updateInterval);
 };
 
 const endGame = async (crashPoint: number, io: Server) => {
@@ -43,11 +41,15 @@ const endGame = async (crashPoint: number, io: Server) => {
   const userRepository = AppDataSource.getRepository(UserEntity);
 
   try {
-    // Process bets for the current round
     for (const bet of currentRoundBets) {
       if (bet.cashoutAt && bet.cashoutAt <= crashPoint) {
         bet.result = "win";
-        bet.user.balance += bet.amount * bet.cashoutAt;
+        bet.user.balance = parseFloat(
+          (
+            Number(bet.user.balance) +
+            Number(bet.amount) * Number(bet.cashoutAt)
+          ).toFixed(4)
+        );
         bet.crash = crashPoint;
       } else {
         bet.result = "lose";
@@ -56,54 +58,44 @@ const endGame = async (crashPoint: number, io: Server) => {
       await userRepository.save(bet.user);
     }
 
-    // Emit the final user list for the round
     emitUserList(io);
 
-    // Delay before fetching previous bets
     setTimeout(async () => {
       currentRoundBets = [];
-
       try {
-        // Fetch list of previous bets
         const result = await betRepository.find({
           where: { currentFlag: true },
           relations: ["user"],
           order: { amount: "DESC" },
         });
 
-        // Mark previous bets as completed
         result.forEach((item) => (item.currentFlag = false));
         await betRepository.save(result);
 
         currentRoundBets = [...result];
-
         emitUserList(io);
       } catch (error) {
         console.error("Error fetching previous bets:", error);
       }
     }, 1000);
 
-    // Start the next game after 7 seconds
     startPendingFlag = true;
-
-    // Set startPendingFlag to false **1 second before startGame**
+    io.emit("startPending", startPendingFlag);
     let remainingTime = 7;
 
     const countdownInterval = setInterval(() => {
-      io.emit("countdown", { time: remainingTime }); // Send time data to frontend
-
+      io.emit("countdown", { time: remainingTime });
       remainingTime--;
-
       if (remainingTime === 0) {
-        clearInterval(countdownInterval); // Stop countdown when it reaches 0
-        startPendingFlag = false; // Set flag to false just before game starts
-        // startGame(io); // Start the game
+        clearInterval(countdownInterval);
+        startPendingFlag = false;
+        io.emit("startPending", startPendingFlag);
       }
     }, 1000);
 
     setTimeout(() => {
       startGame(io);
-    }, 8000); // ✅ Runs at 7 seconds
+    }, 8000);
   } catch (error) {
     console.error("Error in endGame:", error);
   }
@@ -128,13 +120,10 @@ export const addBetToCurrentRound = async (
         currentRoundBets = currentRoundBets.map((item) =>
           item.id === bet.id ? bet : item
         );
-        console.log(currentRoundBets, "==currentRoundBet==");
       } else {
         return null;
       }
     }
-
-    // Emit the updated user list for the current round
     emitUserList(io);
   } catch (error) {
     console.error("Error adding bet to current round:", error);
