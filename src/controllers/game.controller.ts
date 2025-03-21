@@ -85,13 +85,25 @@ const endGame = async (crashPoint: number, io: Server) => {
 
     // Start the next game after 7 seconds
     startPendingFlag = true;
-    setTimeout(() => {
-      startPendingFlag = false;
-    }, 6000);
+
+    // Set startPendingFlag to false **1 second before startGame**
+    let remainingTime = 7;
+
+    const countdownInterval = setInterval(() => {
+      io.emit("countdown", { time: remainingTime }); // Send time data to frontend
+
+      remainingTime--;
+
+      if (remainingTime === 0) {
+        clearInterval(countdownInterval); // Stop countdown when it reaches 0
+        startPendingFlag = false; // Set flag to false just before game starts
+        // startGame(io); // Start the game
+      }
+    }, 1000);
 
     setTimeout(() => {
       startGame(io);
-    }, 1000);
+    }, 8000); // ✅ Runs at 7 seconds
   } catch (error) {
     console.error("Error in endGame:", error);
   }
@@ -116,6 +128,7 @@ export const addBetToCurrentRound = async (
         currentRoundBets = currentRoundBets.map((item) =>
           item.id === bet.id ? bet : item
         );
+        console.log(currentRoundBets, "==currentRoundBet==");
       } else {
         return null;
       }

@@ -19,16 +19,18 @@ export const setupSocket = (server: any) => {
     // Handle placing a bet
     socket.on("placeBet", async (data: any) => {
       try {
-        const { userId, amount } = data;
+        const { username, amount } = data;
 
-        if (!userId || !amount || amount <= 0) {
+        if (!username || !amount || amount <= 0) {
           return socket.emit("error", { message: "Invalid bet data" });
         }
 
         const betRepository = AppDataSource.getRepository(BetEntity);
         const userRepository = AppDataSource.getRepository(UserEntity);
 
-        const user = await userRepository.findOne({ where: { uuid: userId } });
+        const user = await userRepository.findOne({
+          where: { name: username },
+        });
         if (!user) return socket.emit("error", { message: "User not found" });
 
         if (user.balance < amount) {
@@ -41,6 +43,7 @@ export const setupSocket = (server: any) => {
         bet.user = user;
         bet.amount = amount;
         bet.result = "pending";
+        bet.crash = 0;
 
         await betRepository.save(bet);
         await userRepository.save(user);
@@ -48,9 +51,9 @@ export const setupSocket = (server: any) => {
         addBetToCurrentRound(bet, io, false);
 
         // Store active bet in memory
-        activeBets.set(userId, bet);
+        activeBets.set(username, bet);
 
-        console.log(`Bet placed: ${amount} by User: ${userId}`);
+        console.log(`Bet placed: ${amount} by User: ${username}`);
         socket.emit("betConfirmed", {
           message: "Bet placed successfully",
           bet,
@@ -64,13 +67,14 @@ export const setupSocket = (server: any) => {
     // Handle cashout
     socket.on("cashout", async (data: any) => {
       try {
-        const { userId, multiplier } = data;
+        const { username, multiplier } = data;
 
-        if (!userId || !multiplier || multiplier <= 1) {
+        if (!username || !multiplier || multiplier <= 1) {
           return socket.emit("error", { message: "Invalid cashout data" });
         }
 
-        const bet = activeBets.get(userId);
+        const bet = activeBets.get(username);
+        console.log(bet, "bet--------");
         if (!bet)
           return socket.emit("error", { message: "No active bet found" });
 
@@ -78,11 +82,11 @@ export const setupSocket = (server: any) => {
         bet.result = "win";
         bet.user.balance += bet.amount * multiplier;
 
-        activeBets.delete(userId); // Remove from memory
+        activeBets.delete(username); // Remove from memory
 
         addBetToCurrentRound(bet, io, true);
 
-        console.log(`User ${userId} cashed out at ${multiplier}x`);
+        console.log(`User ${username} cashed out at ${multiplier}x`);
         socket.emit("cashoutConfirmed", { message: "Cashout successful", bet });
       } catch (error) {
         console.error("Error in cashout:", error);
@@ -94,10 +98,10 @@ export const setupSocket = (server: any) => {
     socket.on("disconnect", () => {
       console.log(`User disconnected: ${socket.id}`);
 
-      for (const [userId, bet] of activeBets.entries()) {
+      for (const [username, bet] of activeBets.entries()) {
         bet.result = "lose"; // Mark as lost
-        activeBets.delete(userId); // Remove from memory
-        console.log(`Auto-lost bet for disconnected user: ${userId}`);
+        activeBets.delete(username); // Remove from memory
+        console.log(`Auto-lost bet for disconnected user: ${username}`);
       }
     });
   });
