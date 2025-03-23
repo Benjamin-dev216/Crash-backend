@@ -1,7 +1,7 @@
 import { Server } from "socket.io";
 import { AppDataSource } from "@/setup/datasource";
 import { BetEntity, UserEntity } from "@/entities";
-import { addBetToCurrentRound } from "@/controllers/game.controller";
+import { addBetToCurrentRound, onCashout } from "@/controllers/game.controller";
 
 const activeBets = new Map<string, BetEntity>();
 
@@ -48,7 +48,7 @@ export const setupSocket = (server: any) => {
         await betRepository.save(bet);
         await userRepository.save(user);
 
-        addBetToCurrentRound(bet, io, false);
+        addBetToCurrentRound(bet, io);
 
         activeBets.set(socket.id, bet); // ✅ Track by socket ID
 
@@ -71,23 +71,21 @@ export const setupSocket = (server: any) => {
           return socket.emit("error", { message: "Invalid cashout data" });
         }
 
-        const bet = activeBets.get(socket.id); // ✅ Retrieve bet by socket ID
-        if (!bet)
-          return socket.emit("error", { message: "No active bet found" });
+        // const bet = activeBets.get(socket.id); // ✅ Retrieve bet by socket ID
+        // if (!bet)
+        //   return socket.emit("error", { message: "No active bet found" });
 
-        bet.cashoutAt = parseFloat(multiplier.toFixed(4));
-        bet.result = "win";
-        bet.multiplier = multiplier;
-        bet.user.balance = parseFloat(
-          (bet.user.balance + bet.amount * multiplier).toFixed(4)
-        );
+        // bet.cashoutAt = parseFloat(multiplier.toFixed(4));
+        // bet.result = "win";
+        // bet.multiplier = multiplier;
 
-        activeBets.delete(socket.id); // ✅ Remove after cashout
+        // activeBets.delete(socket.id); // ✅ Remove after cashout
 
-        addBetToCurrentRound(bet, io, true);
+        // addBetToCurrentRound(bet, io, true);
+        onCashout(username, multiplier, io);
 
         console.log(`User ${username} cashed out at ${multiplier}x`);
-        socket.emit("cashoutConfirmed", { message: "Cashout successful", bet });
+        // socket.emit("cashoutConfirmed", { message: "Cashout successful", bet });
       } catch (error) {
         console.error("Error in cashout:", error);
         socket.emit("error", { message: "Internal server error" });

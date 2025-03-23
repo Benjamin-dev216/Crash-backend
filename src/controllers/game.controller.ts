@@ -47,10 +47,6 @@ const endGame = async (crashPoint: number, io: Server) => {
 
   try {
     for (const bet of currentRoundBets) {
-      if (!currentRoundBets.some((b) => b.user.uuid === bet.user.uuid)) {
-        continue;
-      }
-
       if (bet.cashoutAt && bet.cashoutAt <= crashPoint) {
         bet.result = "win";
         bet.user.balance = parseFloat(
@@ -60,8 +56,18 @@ const endGame = async (crashPoint: number, io: Server) => {
           ).toFixed(4)
         );
         bet.crash = crashPoint;
+        // console.log(bet.user.balance, bet.amount, bet.cashoutAt);
       } else {
         bet.result = "lose";
+
+        bet.user.balance = parseFloat(
+          (Number(bet.user.balance) - Number(bet.amount)).toFixed(4)
+        );
+
+        // Ensure balance never goes negative
+        if (bet.user.balance < 0) {
+          bet.user.balance = 0;
+        }
       }
 
       bet.currentFlag = false;
@@ -114,8 +120,8 @@ const endGame = async (crashPoint: number, io: Server) => {
 
 export const addBetToCurrentRound = async (
   bet: BetEntity,
-  io: Server,
-  winningFlag: boolean
+  io: Server
+  // winningFlag: boolean
 ) => {
   const betRepository = AppDataSource.getRepository(BetEntity);
 
@@ -126,18 +132,26 @@ export const addBetToCurrentRound = async (
       insertSorted(bet);
       emitUserList(io);
     } else {
-      if (winningFlag) {
-        currentRoundBets.map((item) => {
-          item.id === bet.id ? bet : item;
-        });
-        emitUserList(io);
-      } else {
-        return null;
-      }
+      return null;
     }
   } catch (error) {
     console.error("Error adding bet to current round:", error);
   }
+};
+
+export const onCashout = async (
+  username: String,
+  multiplier: number,
+  io: Server
+) => {
+  currentRoundBets.map((item) => {
+    if (item.user.name === username) {
+      item.cashoutAt = parseFloat(multiplier.toFixed(4));
+      item.result = "win";
+      item.multiplier = multiplier;
+    }
+  });
+  emitUserList(io);
 };
 
 const insertSorted = (bet: BetEntity) => {
@@ -150,7 +164,16 @@ const insertSorted = (bet: BetEntity) => {
 };
 
 export const emitUserList = async (io: Server) => {
-  io.emit("userList", currentRoundBets);
+  const filteredBets = currentRoundBets.map(
+    ({ id, user, amount, cashoutAt }) => ({
+      id,
+      username: user.name,
+      amount,
+      cashoutAt,
+    })
+  );
+
+  io.emit("userList", filteredBets);
 };
 
 export const fetchHistory = async (
