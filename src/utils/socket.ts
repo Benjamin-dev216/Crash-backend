@@ -1,9 +1,11 @@
 import { Server } from "socket.io";
 import { AppDataSource } from "@/setup/datasource";
 import { BetEntity, UserEntity } from "@/entities";
-import { addBetToCurrentRound, onCashout } from "@/controllers/game.controller";
-
-const activeBets = new Map<string, BetEntity>();
+import {
+  addBetToCurrentRound,
+  onCashout,
+  startPendingFlag,
+} from "@/controllers/game.controller";
 
 export const setupSocket = (server: any) => {
   const io = new Server(server, {
@@ -37,20 +39,23 @@ export const setupSocket = (server: any) => {
         }
 
         user.balance = parseFloat((user.balance - amount).toFixed(4));
+        if (user.balance < 0) {
+          user.balance = 0;
+        }
 
         const bet = new BetEntity();
         bet.user = user;
         bet.amount = parseFloat(amount.toFixed(4));
         bet.result = "pending";
         bet.crash = 0;
-        bet.socketId = socket.id; // ✅ Store socket ID
+        bet.socketId = socket.id;
 
         await betRepository.save(bet);
         await userRepository.save(user);
 
-        addBetToCurrentRound(bet, io);
+        if (startPendingFlag) addBetToCurrentRound(bet, io);
 
-        activeBets.set(socket.id, bet); // ✅ Track by socket ID
+        // activeBets.set(socket.id, bet);
 
         console.log(`Bet placed: ${amount} by User: ${username}`);
         socket.emit("betConfirmed", {
@@ -59,7 +64,10 @@ export const setupSocket = (server: any) => {
         });
       } catch (error) {
         console.error("Error in placeBet:", error);
-        socket.emit("error", { message: "Internal server error" });
+        socket.emit("error", {
+          message: "Internal server error",
+          details: (error as Error).message,
+        });
       }
     });
 
@@ -70,39 +78,38 @@ export const setupSocket = (server: any) => {
         if (!username || !multiplier || multiplier <= 1) {
           return socket.emit("error", { message: "Invalid cashout data" });
         }
-        onCashout(username, multiplier, io);
 
+        await onCashout(username, multiplier, io);
         console.log(`User ${username} cashed out at ${multiplier}x`);
       } catch (error) {
         console.error("Error in cashout:", error);
-        socket.emit("error", { message: "Internal server error" });
+        socket.emit("error", {
+          message: "Internal server error",
+          details: (error as Error).message,
+        });
       }
     });
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       console.log(`User disconnected: ${socket.id}`);
 
-      const bet = activeBets.get(socket.id);
-      if (bet) {
-        bet.result = "lose"; // Mark as lost
-        activeBets.delete(socket.id); // ✅ Remove bet from memory
-        console.log(`Auto-lost bet for disconnected user: ${bet.user.name}`);
-      }
+      // const bet = activeBets.get(socket.id);
+      // if (bet) {
+      //   bet.result = "lose";
+
+      //   try {
+      //     const betRepository = AppDataSource.getRepository(BetEntity);
+      //     await betRepository.save(bet);
+      //     console.log(`Auto-lost bet for disconnected user: ${bet.user.name}`);
+      //   } catch (error) {
+      //     console.error("Error saving lost bet:", error);
+      //   }
+
+      //   activeBets.delete(socket.id);
+      //   io.emit("userDisconnected", { username: bet.user.name });
+      // }
     });
   });
-
-  setInterval(async () => {
-    if (activeBets.size > 0) {
-      const betRepository = AppDataSource.getRepository(BetEntity);
-      const userRepository = AppDataSource.getRepository(UserEntity);
-
-      for (const bet of activeBets.values()) {
-        await betRepository.save(bet);
-        await userRepository.save(bet.user);
-      }
-      console.log("Batch saved bets to database.");
-    }
-  }, 5000);
 
   return io;
 };

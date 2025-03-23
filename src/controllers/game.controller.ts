@@ -5,7 +5,7 @@ import { Server } from "socket.io";
 
 let gameInterval: NodeJS.Timeout;
 let currentRoundBets: BetEntity[] = []; // Track bets for the current round
-let startPendingFlag = false;
+export let startPendingFlag = false;
 
 export const startGame = async (io: Server) => {
   clearInterval(gameInterval);
@@ -41,7 +41,6 @@ export const startGame = async (io: Server) => {
 const endGame = async (crashPoint: number, io: Server) => {
   io.emit("gameEnd", { crashPoint });
   io.emit("cashoutDisabled", true);
-
   const betRepository = AppDataSource.getRepository(BetEntity);
   const userRepository = AppDataSource.getRepository(UserEntity);
 
@@ -59,23 +58,13 @@ const endGame = async (crashPoint: number, io: Server) => {
         // console.log(bet.user.balance, bet.amount, bet.cashoutAt);
       } else {
         bet.result = "lose";
-
-        bet.user.balance = parseFloat(
-          (Number(bet.user.balance) - Number(bet.amount)).toFixed(4)
-        );
-
-        // Ensure balance never goes negative
-        if (bet.user.balance < 0) {
-          bet.user.balance = 0;
-        }
       }
 
-      // bet.currentFlag = false;
       await betRepository.save(bet);
       await userRepository.save(bet.user);
     }
 
-    emitUserList(io);
+    emitUserList(io, true);
     setTimeout(async () => {
       currentRoundBets = [];
       const result = await betRepository.find({
@@ -83,12 +72,14 @@ const endGame = async (crashPoint: number, io: Server) => {
         relations: ["user"],
         order: { amount: "DESC" },
       });
+      console.log(result);
 
       result.forEach((item) => (item.currentFlag = false));
       await betRepository.save(result);
+      console.log(result);
 
       currentRoundBets = [...result];
-      emitUserList(io);
+      emitUserList(io, false);
 
       io.emit("startPending", true);
 
@@ -108,8 +99,8 @@ const endGame = async (crashPoint: number, io: Server) => {
       }, 1000);
 
       setTimeout(() => {
-        startGame(io);
         startPendingFlag = false;
+        startGame(io);
         io.emit("startPending", true);
       }, 8000);
     }, 1000);
@@ -123,12 +114,13 @@ export const addBetToCurrentRound = async (bet: BetEntity, io: Server) => {
 
   try {
     if (startPendingFlag) {
-      bet.currentFlag = false;
-      insertSorted(bet);
-      emitUserList(io);
-      await betRepository.save(bet);
-    } else {
-      return null;
+      const existingBet = currentRoundBets.find((b) => b.id === bet.id);
+      if (!existingBet) {
+        bet.currentFlag = false;
+        await betRepository.save(bet);
+        insertSorted(bet);
+        emitUserList(io, false);
+      }
     }
   } catch (error) {
     console.error("Error adding bet to current round:", error);
@@ -147,19 +139,22 @@ export const onCashout = async (
       item.multiplier = multiplier;
     }
   });
-  emitUserList(io);
+  emitUserList(io, false);
 };
 
 const insertSorted = (bet: BetEntity) => {
+  const exists = currentRoundBets.some((b) => b.id === bet.id);
+  if (exists) return;
+
   let index = currentRoundBets.findIndex((b) => b.amount < bet.amount);
   if (index === -1) {
-    currentRoundBets.push(bet); // If no smaller amount is found, add to the end
+    currentRoundBets.push(bet);
   } else {
-    currentRoundBets.splice(index, 0, bet); // Insert at the correct position
+    currentRoundBets.splice(index, 0, bet);
   }
 };
 
-export const emitUserList = async (io: Server) => {
+export const emitUserList = async (io: Server, gameEndFlag: boolean) => {
   const filteredBets = currentRoundBets.map(
     ({ id, user, amount, cashoutAt }) => ({
       id,
@@ -169,13 +164,12 @@ export const emitUserList = async (io: Server) => {
     })
   );
 
-  io.emit("userList", filteredBets);
+  io.emit("userList", { filteredBets, gameEndFlag });
 };
 
 export const fetchHistory = async (
   req: Request,
-  res: Response,
-  next: NextFunction
+  res: Response
 ): Promise<void> => {
   try {
     const userId = String(req.query.userId);
