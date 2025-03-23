@@ -43,13 +43,14 @@ export const setupSocket = (server: any) => {
         bet.amount = parseFloat(amount.toFixed(4));
         bet.result = "pending";
         bet.crash = 0;
+        bet.socketId = socket.id; // ✅ Store socket ID
 
         await betRepository.save(bet);
         await userRepository.save(user);
 
         addBetToCurrentRound(bet, io, false);
 
-        activeBets.set(username, bet);
+        activeBets.set(socket.id, bet); // ✅ Track by socket ID
 
         console.log(`Bet placed: ${amount} by User: ${username}`);
         socket.emit("betConfirmed", {
@@ -70,8 +71,7 @@ export const setupSocket = (server: any) => {
           return socket.emit("error", { message: "Invalid cashout data" });
         }
 
-        const bet = activeBets.get(username);
-        console.log(bet, "bet--------");
+        const bet = activeBets.get(socket.id); // ✅ Retrieve bet by socket ID
         if (!bet)
           return socket.emit("error", { message: "No active bet found" });
 
@@ -82,7 +82,7 @@ export const setupSocket = (server: any) => {
           (bet.user.balance + bet.amount * multiplier).toFixed(4)
         );
 
-        activeBets.delete(username);
+        activeBets.delete(socket.id); // ✅ Remove after cashout
 
         addBetToCurrentRound(bet, io, true);
 
@@ -97,10 +97,11 @@ export const setupSocket = (server: any) => {
     socket.on("disconnect", () => {
       console.log(`User disconnected: ${socket.id}`);
 
-      for (const [username, bet] of activeBets.entries()) {
-        bet.result = "lose";
-        activeBets.delete(username);
-        console.log(`Auto-lost bet for disconnected user: ${username}`);
+      const bet = activeBets.get(socket.id);
+      if (bet) {
+        bet.result = "lose"; // Mark as lost
+        activeBets.delete(socket.id); // ✅ Remove bet from memory
+        console.log(`Auto-lost bet for disconnected user: ${bet.user.name}`);
       }
     });
   });

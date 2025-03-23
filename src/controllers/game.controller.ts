@@ -10,7 +10,11 @@ let startPendingFlag = false;
 export const startGame = async (io: Server) => {
   clearInterval(gameInterval);
 
-  const crashPoint = parseFloat((Math.random() * 10 + 1).toFixed(4)); // Random crash point between 1x and 20x
+  for (const bet of currentRoundBets) {
+    io.to(bet.socketId).emit("cashoutDisabled", false);
+  }
+
+  const crashPoint = parseFloat((Math.random() * 10 + 1).toFixed(4)); // Random crash point
   io.emit("gameStart", { crashPoint });
 
   let multiplier = 1;
@@ -36,12 +40,17 @@ export const startGame = async (io: Server) => {
 
 const endGame = async (crashPoint: number, io: Server) => {
   io.emit("gameEnd", { crashPoint });
+  io.emit("cashoutDisabled", true);
 
   const betRepository = AppDataSource.getRepository(BetEntity);
   const userRepository = AppDataSource.getRepository(UserEntity);
 
   try {
     for (const bet of currentRoundBets) {
+      if (!currentRoundBets.some((b) => b.user.uuid === bet.user.uuid)) {
+        continue;
+      }
+
       if (bet.cashoutAt && bet.cashoutAt <= crashPoint) {
         bet.result = "win";
         bet.user.balance = parseFloat(
@@ -54,48 +63,51 @@ const endGame = async (crashPoint: number, io: Server) => {
       } else {
         bet.result = "lose";
       }
+
+      bet.currentFlag = false;
       await betRepository.save(bet);
       await userRepository.save(bet.user);
     }
 
     emitUserList(io);
-
     setTimeout(async () => {
       currentRoundBets = [];
-      try {
-        const result = await betRepository.find({
-          where: { currentFlag: true },
-          relations: ["user"],
-          order: { amount: "DESC" },
-        });
+      const result = await betRepository.find({
+        where: { currentFlag: true },
+        relations: ["user"],
+        order: { amount: "DESC" },
+      });
 
-        result.forEach((item) => (item.currentFlag = false));
-        await betRepository.save(result);
+      // result.forEach((item) => (item.currentFlag = false));
+      // await betRepository.save(result);
 
-        currentRoundBets = [...result];
-        emitUserList(io);
-      } catch (error) {
-        console.error("Error fetching previous bets:", error);
+      currentRoundBets = [...result];
+      emitUserList(io);
+
+      io.emit("startPending", true);
+
+      for (const bet of currentRoundBets) {
+        io.to(bet.socketId).emit("startPending", false);
+        console.log(bet.socketId);
       }
-    }, 1000);
 
-    startPendingFlag = true;
-    io.emit("startPending", startPendingFlag);
-    let remainingTime = 7;
+      startPendingFlag = true;
+      let remainingTime = 7;
+      const countdownInterval = setInterval(() => {
+        io.emit("countdown", { time: remainingTime });
+        remainingTime--;
+        if (remainingTime === 0) {
+          clearInterval(countdownInterval);
+          io.emit("startPending", false);
+        }
+      }, 1000);
 
-    const countdownInterval = setInterval(() => {
-      io.emit("countdown", { time: remainingTime });
-      remainingTime--;
-      if (remainingTime === 0) {
-        clearInterval(countdownInterval);
+      setTimeout(() => {
+        startGame(io);
         startPendingFlag = false;
-        io.emit("startPending", startPendingFlag);
-      }
+        io.emit("startPending", true);
+      }, 8000);
     }, 1000);
-
-    setTimeout(() => {
-      startGame(io);
-    }, 8000);
   } catch (error) {
     console.error("Error in endGame:", error);
   }
@@ -112,21 +124,31 @@ export const addBetToCurrentRound = async (
     if (startPendingFlag) {
       bet.currentFlag = false;
       await betRepository.save(bet);
-      currentRoundBets = [...currentRoundBets, bet].sort(
-        (a, b) => b.amount - a.amount
-      );
+      insertSorted(bet);
+      emitUserList(io);
     } else {
       if (winningFlag) {
-        currentRoundBets = currentRoundBets.map((item) =>
-          item.id === bet.id ? bet : item
-        );
+        console.log(winningFlag, currentRoundBets);
+        currentRoundBets.map((item) => {
+          console.log(item);
+          item.id === bet.id ? bet : item;
+        });
+        emitUserList(io);
       } else {
         return null;
       }
     }
-    emitUserList(io);
   } catch (error) {
     console.error("Error adding bet to current round:", error);
+  }
+};
+
+const insertSorted = (bet: BetEntity) => {
+  let index = currentRoundBets.findIndex((b) => b.amount < bet.amount);
+  if (index === -1) {
+    currentRoundBets.push(bet); // If no smaller amount is found, add to the end
+  } else {
+    currentRoundBets.splice(index, 0, bet); // Insert at the correct position
   }
 };
 

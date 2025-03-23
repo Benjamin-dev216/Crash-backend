@@ -25,6 +25,9 @@ export class BetEntity extends CoreEntity {
   @Column({ type: "numeric", precision: 10, scale: 4, default: 0 })
   crash: number;
 
+  @Column({ type: "varchar", length: 255, nullable: true })
+  socketId: string;
+
   @ManyToOne(() => UserEntity, (user) => user.bets)
   user: UserEntity;
 }

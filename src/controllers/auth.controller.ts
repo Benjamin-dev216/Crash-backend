@@ -25,6 +25,7 @@ const signUpHandler = async (req: Request, res: Response) => {
     res.status(201).json({
       token: token,
       username: newUser.name,
+      userId: newUser.uuid,
     });
   } else {
     res.status(409).json({ message: "User already exists" });
@@ -53,6 +54,7 @@ const signInHandler = async (req: Request, res: Response) => {
   res.status(200).json({
     token: token,
     username: user.name,
+    userId: user.uuid,
   });
 };
 
