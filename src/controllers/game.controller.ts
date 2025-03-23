@@ -88,7 +88,6 @@ const endGame = async (crashPoint: number, io: Server) => {
 
       for (const bet of currentRoundBets) {
         io.to(bet.socketId).emit("startPending", false);
-        console.log(bet.socketId);
       }
 
       startPendingFlag = true;
@@ -128,9 +127,7 @@ export const addBetToCurrentRound = async (
       emitUserList(io);
     } else {
       if (winningFlag) {
-        console.log(winningFlag, currentRoundBets);
         currentRoundBets.map((item) => {
-          console.log(item);
           item.id === bet.id ? bet : item;
         });
         emitUserList(io);
