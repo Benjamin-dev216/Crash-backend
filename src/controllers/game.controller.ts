@@ -70,7 +70,7 @@ const endGame = async (crashPoint: number, io: Server) => {
         }
       }
 
-      bet.currentFlag = false;
+      // bet.currentFlag = false;
       await betRepository.save(bet);
       await userRepository.save(bet.user);
     }
@@ -84,8 +84,8 @@ const endGame = async (crashPoint: number, io: Server) => {
         order: { amount: "DESC" },
       });
 
-      // result.forEach((item) => (item.currentFlag = false));
-      // await betRepository.save(result);
+      result.forEach((item) => (item.currentFlag = false));
+      await betRepository.save(result);
 
       currentRoundBets = [...result];
       emitUserList(io);
@@ -118,19 +118,15 @@ const endGame = async (crashPoint: number, io: Server) => {
   }
 };
 
-export const addBetToCurrentRound = async (
-  bet: BetEntity,
-  io: Server
-  // winningFlag: boolean
-) => {
+export const addBetToCurrentRound = async (bet: BetEntity, io: Server) => {
   const betRepository = AppDataSource.getRepository(BetEntity);
 
   try {
     if (startPendingFlag) {
       bet.currentFlag = false;
-      await betRepository.save(bet);
       insertSorted(bet);
       emitUserList(io);
+      await betRepository.save(bet);
     } else {
       return null;
     }

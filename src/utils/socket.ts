@@ -70,22 +70,9 @@ export const setupSocket = (server: any) => {
         if (!username || !multiplier || multiplier <= 1) {
           return socket.emit("error", { message: "Invalid cashout data" });
         }
-
-        // const bet = activeBets.get(socket.id); // ✅ Retrieve bet by socket ID
-        // if (!bet)
-        //   return socket.emit("error", { message: "No active bet found" });
-
-        // bet.cashoutAt = parseFloat(multiplier.toFixed(4));
-        // bet.result = "win";
-        // bet.multiplier = multiplier;
-
-        // activeBets.delete(socket.id); // ✅ Remove after cashout
-
-        // addBetToCurrentRound(bet, io, true);
         onCashout(username, multiplier, io);
 
         console.log(`User ${username} cashed out at ${multiplier}x`);
-        // socket.emit("cashoutConfirmed", { message: "Cashout successful", bet });
       } catch (error) {
         console.error("Error in cashout:", error);
         socket.emit("error", { message: "Internal server error" });
