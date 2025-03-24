@@ -37,12 +37,6 @@ export const setupSocket = (server: any) => {
         if (user.balance < amount) {
           return socket.emit("error", { message: "Insufficient balance" });
         }
-
-        user.balance = parseFloat((user.balance - amount).toFixed(4));
-        if (user.balance < 0) {
-          user.balance = 0;
-        }
-
         const bet = new BetEntity();
         bet.user = user;
         bet.amount = parseFloat(amount.toFixed(4));

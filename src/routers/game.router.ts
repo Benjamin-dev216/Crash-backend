@@ -3,4 +3,4 @@ import { Router } from "express";
 
 export const gameRouter = Router();
 
-gameRouter.get("/history", gameController.fetchHistory);
+gameRouter.get("/history/:username", gameController.fetchHistory);

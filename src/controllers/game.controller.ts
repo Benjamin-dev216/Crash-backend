@@ -63,10 +63,13 @@ export const startGame = async (io: Server) => {
 const endGame = async (crashPoint: number, io: Server) => {
   io.emit("gameEnd", { crashPoint });
   io.emit("cashoutDisabled", true);
+
   const betRepository = AppDataSource.getRepository(BetEntity);
   const userRepository = AppDataSource.getRepository(UserEntity);
 
   try {
+    const processedUsers = new Map<string, string>(); // Track processed users
+
     for (const bet of currentRoundBets) {
       if (bet.cashoutAt && bet.cashoutAt <= crashPoint) {
         bet.result = "win";
@@ -76,19 +79,31 @@ const endGame = async (crashPoint: number, io: Server) => {
             Number(bet.amount) * Number(bet.cashoutAt)
           ).toFixed(4)
         );
-        bet.crash = crashPoint;
-        // console.log(bet.user.balance, bet.amount, bet.cashoutAt);
       } else {
         bet.result = "lose";
-        bet.crash = crashPoint;
+        bet.user.balance = Math.max(
+          0,
+          parseFloat((bet.user.balance - bet.amount).toFixed(4))
+        );
       }
 
+      bet.crash = crashPoint;
       bet.round = currentRound;
+
       await betRepository.save(bet);
       await userRepository.save(bet.user);
+
+      processedUsers.set(bet.user.name, bet.socketId); // Add user to processed list
     }
 
     emitUserList(io, true);
+
+    // 🔥 Emit history update for each unique user at the end of the round
+    for (const [username, socketId] of processedUsers) {
+      emitUserHistory(username, socketId, io);
+    }
+
+    // Reset bets and start next round
     setTimeout(async () => {
       currentRoundBets = [];
 
@@ -105,12 +120,8 @@ const endGame = async (crashPoint: number, io: Server) => {
       emitUserList(io, false);
 
       io.emit("startPending", true);
-
-      for (const bet of currentRoundBets) {
-        io.to(bet.socketId).emit("startPending", false);
-      }
-
       startPendingFlag = true;
+
       let remainingTime = 7;
       const countdownInterval = setInterval(() => {
         io.emit("countdown", { time: remainingTime });
@@ -129,6 +140,39 @@ const endGame = async (crashPoint: number, io: Server) => {
     }, 1000);
   } catch (error) {
     console.error("Error in endGame:", error);
+  }
+};
+
+export const emitUserHistory = async (
+  username: string,
+  socketId: string,
+  io: Server
+) => {
+  const betRepository = AppDataSource.getRepository(BetEntity);
+
+  try {
+    const bets = await betRepository.find({
+      where: { user: { name: username } },
+      relations: ["round"],
+      order: { createdAt: "DESC" },
+    });
+
+    io.to(socketId).emit("userHistoryUpdate", {
+      bets: bets.map(
+        ({ id, amount, result, round, createdAt, multiplier, crash }) => ({
+          id,
+          createdAt,
+          roundId: round.id,
+          amount,
+          odds: multiplier || 0,
+          winAmount: multiplier ? amount * multiplier : 0,
+          crashPoint: crash,
+          result,
+        })
+      ),
+    });
+  } catch (error) {
+    console.error("Error emitting user history:", error);
   }
 };
 
@@ -195,30 +239,29 @@ export const fetchHistory = async (
   res: Response
 ): Promise<void> => {
   try {
-    const username = String(req.query.username);
-
-    if (!username) {
-      res.status(400).json({ error: "User ID is required" });
+    const userId = req.params.username;
+    if (!userId) {
+      res.status(400).json({ error: "User name is required" });
     }
 
-    const userRepository = AppDataSource.getRepository(UserEntity);
-    const user = await userRepository.findOne({
-      where: { name: username },
-      relations: ["bets"],
+    const betRepository = AppDataSource.getRepository(BetEntity);
+    const bets = await betRepository.find({
+      where: { user: { uuid: userId } },
+      relations: ["round"],
+      order: { createdAt: "DESC" },
     });
-
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
+    if (!bets) {
+      res.status(404).json({ error: "Bets not found" });
     }
 
     res.json({
-      bets: user.bets.map(
+      bets: bets.map(
         ({ id, amount, result, round, createdAt, multiplier, crash }) => ({
           id,
           createdAt,
           roundId: round.id,
           amount,
-          oods: multiplier,
+          odds: multiplier ? multiplier : 0,
           winAmount: amount * multiplier,
           crashPoint: crash,
           result,
