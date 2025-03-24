@@ -2,6 +2,7 @@ import { BetEntity, UserEntity, RoundEntity } from "@/entities";
 import { AppDataSource } from "@/setup/datasource";
 import { Request, Response, NextFunction } from "express";
 import { Server } from "socket.io";
+import { IsNull, Not } from "typeorm";
 
 let currentRound: RoundEntity | null = null;
 let gameInterval: NodeJS.Timeout;
@@ -120,6 +121,11 @@ const endGame = async (crashPoint: number, io: Server) => {
       emitUserList(io, false);
 
       io.emit("startPending", true);
+
+      for (const bet of currentRoundBets) {
+        io.to(bet.socketId).emit("startPending", false);
+      }
+
       startPendingFlag = true;
 
       let remainingTime = 7;
@@ -152,7 +158,10 @@ export const emitUserHistory = async (
 
   try {
     const bets = await betRepository.find({
-      where: { user: { name: username } },
+      where: {
+        user: { name: username },
+        round: { id: Not(IsNull()) }, // Ensures roundId is not null
+      },
       relations: ["round"],
       order: { createdAt: "DESC" },
     });
