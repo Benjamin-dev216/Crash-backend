@@ -15,7 +15,7 @@ export class RoundEntity {
   @CreateDateColumn()
   startTime: Date;
 
-  @Column({ type: "decimal", precision: 10, scale: 4 })
+  @Column({ type: "decimal", precision: 10, scale: 4, nullable: true })
   crashPoint: number;
 
   @OneToMany(() => BetEntity, (bet) => bet.round, { cascade: true })
