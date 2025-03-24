@@ -164,6 +164,7 @@ export const emitUserHistory = async (
       },
       relations: ["round"],
       order: { createdAt: "DESC" },
+      take: 10,
     });
 
     io.to(socketId).emit("userHistoryUpdate", {
@@ -258,6 +259,7 @@ export const fetchHistory = async (
       where: { user: { uuid: userId } },
       relations: ["round"],
       order: { createdAt: "DESC" },
+      take: 10,
     });
     if (!bets) {
       res.status(404).json({ error: "Bets not found" });
