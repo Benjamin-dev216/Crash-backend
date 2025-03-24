@@ -11,6 +11,10 @@ export let startPendingFlag = false;
 export const startGame = async (io: Server) => {
   clearInterval(gameInterval);
 
+  for (const bet of currentRoundBets) {
+    io.to(bet.socketId).emit("cashoutDisabled", false);
+  }
+
   const roundRepository = AppDataSource.getRepository(RoundEntity);
 
   // ✅ Create and save a new round before using it
