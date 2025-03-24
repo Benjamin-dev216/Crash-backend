@@ -80,6 +80,7 @@ const endGame = async (crashPoint: number, io: Server) => {
         // console.log(bet.user.balance, bet.amount, bet.cashoutAt);
       } else {
         bet.result = "lose";
+        bet.crash = crashPoint;
       }
 
       bet.round = currentRound;
@@ -194,15 +195,15 @@ export const fetchHistory = async (
   res: Response
 ): Promise<void> => {
   try {
-    const userId = String(req.query.userId);
+    const username = String(req.query.username);
 
-    if (!userId) {
+    if (!username) {
       res.status(400).json({ error: "User ID is required" });
     }
 
     const userRepository = AppDataSource.getRepository(UserEntity);
     const user = await userRepository.findOne({
-      where: { uuid: userId },
+      where: { name: username },
       relations: ["bets"],
     });
 
@@ -215,11 +216,12 @@ export const fetchHistory = async (
         ({ id, amount, result, round, createdAt, multiplier, crash }) => ({
           id,
           createdAt,
-          amount,
-          result,
           roundId: round.id,
-          multiplier,
-          crash,
+          amount,
+          oods: multiplier,
+          winAmount: amount * multiplier,
+          crashPoint: crash,
+          result,
         })
       ),
     });
