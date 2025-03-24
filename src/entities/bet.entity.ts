@@ -28,6 +28,9 @@ export class BetEntity extends CoreEntity {
   @Column({ type: "varchar", length: 255, nullable: true })
   socketId: string;
 
+  @Column({ type: "varchar", length: 255 })
+  roundId: string; // Added roundId field
+
   @ManyToOne(() => UserEntity, (user) => user.bets)
   user: UserEntity;
 }

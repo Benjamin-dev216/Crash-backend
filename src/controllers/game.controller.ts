@@ -2,20 +2,23 @@ import { BetEntity, UserEntity } from "@/entities";
 import { AppDataSource } from "@/setup/datasource";
 import { Request, Response, NextFunction } from "express";
 import { Server } from "socket.io";
+import { v4 as uuidv4 } from "uuid"; // Import UUID generator
 
+let currentRoundId: string; // Store current round ID globally
 let gameInterval: NodeJS.Timeout;
 let currentRoundBets: BetEntity[] = []; // Track bets for the current round
 export let startPendingFlag = false;
 
 export const startGame = async (io: Server) => {
   clearInterval(gameInterval);
+  currentRoundId = uuidv4(); // Generate a new round ID
 
   for (const bet of currentRoundBets) {
     io.to(bet.socketId).emit("cashoutDisabled", false);
   }
 
-  const crashPoint = parseFloat((Math.random() * 10 + 1).toFixed(4)); // Random crash point
-  io.emit("gameStart", { crashPoint });
+  const crashPoint = parseFloat((Math.random() * 10 + 1).toFixed(4));
+  io.emit("gameStart", { crashPoint, roundId: currentRoundId });
 
   let multiplier = 1;
   let timeElapsed = 0;
@@ -39,7 +42,7 @@ export const startGame = async (io: Server) => {
 };
 
 const endGame = async (crashPoint: number, io: Server) => {
-  io.emit("gameEnd", { crashPoint });
+  io.emit("gameEnd", { crashPoint, roundId: currentRoundId });
   io.emit("cashoutDisabled", true);
   const betRepository = AppDataSource.getRepository(BetEntity);
   const userRepository = AppDataSource.getRepository(UserEntity);
@@ -54,17 +57,18 @@ const endGame = async (crashPoint: number, io: Server) => {
             Number(bet.amount) * Number(bet.cashoutAt)
           ).toFixed(4)
         );
-        bet.crash = crashPoint;
-        // console.log(bet.user.balance, bet.amount, bet.cashoutAt);
       } else {
         bet.result = "lose";
       }
 
+      bet.crash = crashPoint;
+      bet.roundId = currentRoundId; // Ensure roundId is stored
       await betRepository.save(bet);
       await userRepository.save(bet.user);
     }
 
     emitUserList(io, true);
+
     setTimeout(async () => {
       currentRoundBets = [];
       const result = await betRepository.find({
@@ -72,12 +76,9 @@ const endGame = async (crashPoint: number, io: Server) => {
         relations: ["user"],
         order: { amount: "DESC" },
       });
-      console.log(result);
 
       result.forEach((item) => (item.currentFlag = false));
       await betRepository.save(result);
-      console.log(result);
-
       currentRoundBets = [...result];
       emitUserList(io, false);
 
@@ -117,6 +118,7 @@ export const addBetToCurrentRound = async (bet: BetEntity, io: Server) => {
       const existingBet = currentRoundBets.find((b) => b.id === bet.id);
       if (!existingBet) {
         bet.currentFlag = false;
+        bet.roundId = currentRoundId; // Assign roundId to the bet
         await betRepository.save(bet);
         insertSorted(bet);
         emitUserList(io, false);
@@ -126,7 +128,6 @@ export const addBetToCurrentRound = async (bet: BetEntity, io: Server) => {
     console.error("Error adding bet to current round:", error);
   }
 };
-
 export const onCashout = async (
   username: String,
   multiplier: number,
@@ -172,23 +173,38 @@ export const fetchHistory = async (
   res: Response
 ): Promise<void> => {
   try {
-    const userId = String(req.query.userId);
+    const username = String(req.query.username);
 
-    if (!userId) {
+    if (!username) {
       res.status(400).json({ error: "User ID is required" });
+      return;
     }
 
     const userRepository = AppDataSource.getRepository(UserEntity);
     const user = await userRepository.findOne({
-      where: { uuid: userId },
+      where: { name: username },
       relations: ["bets"],
     });
 
     if (!user) {
       res.status(404).json({ error: "User not found" });
+      return;
     }
 
-    res.json(user);
+    // Include roundId in response
+    res.json({
+      bets: user.bets.map(
+        ({ id, amount, result, roundId, createdAt, multiplier, crash }) => ({
+          id,
+          createdAt,
+          amount,
+          result,
+          roundId,
+          multiplier,
+          crash,
+        })
+      ),
+    });
   } catch (error) {
     console.error("Error fetching user history:", error);
     res.status(500).json({ error: "Internal server error" });
