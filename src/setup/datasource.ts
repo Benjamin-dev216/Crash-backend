@@ -3,6 +3,7 @@
 import { DataSource } from "typeorm";
 import { UserEntity, BetEntity } from "@/entities";
 import "dotenv/config";
+import { RoundEntity } from "@/entities/round.entity";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
@@ -11,7 +12,7 @@ export const AppDataSource = new DataSource({
   password: process.env.DB_PASSWORD,
   port: Number(process.env.DB_PORT) || 5432,
   database: process.env.DB_DATABASE,
-  entities: [UserEntity, BetEntity],
+  entities: [UserEntity, BetEntity, RoundEntity],
   logging: false,
   synchronize: true,
 });

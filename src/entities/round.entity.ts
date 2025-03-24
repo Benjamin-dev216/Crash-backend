@@ -7,17 +7,17 @@ import {
 } from "typeorm";
 import { BetEntity } from "./bet.entity";
 
-@Entity()
+@Entity("rounds")
 export class RoundEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
   @CreateDateColumn()
-  createdAt: Date;
+  startTime: Date;
 
-  @Column({ type: "decimal", precision: 10, scale: 4, nullable: false })
+  @Column({ type: "decimal", precision: 10, scale: 4 })
   crashPoint: number;
 
-  @OneToMany(() => BetEntity, (bet) => bet.round)
+  @OneToMany(() => BetEntity, (bet) => bet.round, { cascade: true })
   bets: BetEntity[];
 }
