@@ -232,16 +232,40 @@ const insertSorted = (bet: BetEntity) => {
 };
 
 export const emitUserList = async (io: Server, gameEndFlag: boolean) => {
-  const filteredBets = currentRoundBets.map(
-    ({ id, user, amount, cashoutAt }) => ({
+  const filteredBets = currentRoundBets
+    .map(({ id, user, amount, cashoutAt, result, multiplier }) => ({
       id,
       username: user.name,
       amount,
       cashoutAt,
-    })
+      result,
+      multiplier,
+    }))
+    .slice(0, 40);
+
+  const numberOfPlayers = currentRoundBets.length;
+
+  const totalBets = currentRoundBets.reduce(
+    (sum, bet) => sum + Number(bet.amount || 0),
+    0
   );
 
-  io.emit("userList", { filteredBets, gameEndFlag });
+  const totalWinnings = currentRoundBets.reduce(
+    (sum, bet) =>
+      sum +
+      (bet.result === "win"
+        ? Number(bet.amount || 0) * (Number(bet.multiplier) || 1)
+        : 0),
+    0
+  );
+
+  io.emit("userList", {
+    filteredBets,
+    gameEndFlag,
+    numberOfPlayers,
+    totalBets: parseFloat(totalBets.toFixed(4)), // Ensures a valid number before formatting
+    totalWinnings: parseFloat(totalWinnings.toFixed(4)), // Ensures a valid number before formatting
+  });
 };
 
 export const fetchHistory = async (
