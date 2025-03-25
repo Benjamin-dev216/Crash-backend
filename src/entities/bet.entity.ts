@@ -17,14 +17,12 @@ export class BetEntity {
 
   @ManyToOne(() => UserEntity, (user) => user.bets, {
     eager: true,
-    nullable: false,
   })
   @JoinColumn({ name: "userId" })
   user: UserEntity;
 
   @ManyToOne(() => RoundEntity, (round) => round.bets, {
     eager: true,
-    nullable: false,
   }) // ✅ Ensure this relation is correct
   @JoinColumn({ name: "roundId" })
   round: RoundEntity;
