@@ -95,6 +95,7 @@ const endGame = async (crashPoint: number, io: Server) => {
       await userRepository.save(bet.user);
 
       processedUsers.set(bet.user.name, bet.socketId); // Add user to processed list
+      io.to(bet.socketId).emit("betResult", {win: bet.result === 'win', amount: bet.amount})
     }
 
     emitUserList(io, true);
