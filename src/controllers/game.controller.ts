@@ -210,14 +210,18 @@ export const onCashout = async (
   multiplier: number,
   io: Server
 ) => {
-  currentRoundBets.map((item) => {
-    if (item.user.name === username) {
-      item.cashoutAt = parseFloat(multiplier.toFixed(4));
-      item.result = "win";
-      item.multiplier = multiplier;
+  if(startPendingFlag) return null;
+  currentRoundBets.forEach((item) => {
+    if (item.user.name !== username) return;
+  
+    item.cashoutAt = parseFloat(multiplier.toFixed(4));
+    item.result = multiplier <= currentRound.crashPoint ? "win" : "lose";
+    item.multiplier = multiplier<= currentRound.crashPoint? multiplier: null;
+  
+    if (item.result === "win") {
+      emitUserList(io, false);
     }
   });
-  emitUserList(io, false);
 };
 
 const insertSorted = (bet: BetEntity) => {

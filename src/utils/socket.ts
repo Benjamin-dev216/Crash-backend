@@ -72,7 +72,6 @@ export const setupSocket = (server: any) => {
         if (!username || !multiplier || multiplier <= 1) {
           return socket.emit("error", { message: "Invalid cashout data" });
         }
-
         await onCashout(username, multiplier, io);
         console.log(`User ${username} cashed out at ${multiplier}x`);
       } catch (error) {
