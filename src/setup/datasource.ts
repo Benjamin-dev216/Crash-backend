@@ -1,9 +1,8 @@
 /** @format */
 
 import { DataSource } from "typeorm";
-import { UserEntity, BetEntity } from "@/entities";
+import { UserEntity, BetEntity, RoundEntity } from "@/entities";
 import "dotenv/config";
-import { RoundEntity } from "@/entities/round.entity";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
@@ -15,4 +14,5 @@ export const AppDataSource = new DataSource({
   entities: [UserEntity, BetEntity, RoundEntity],
   logging: false,
   synchronize: true,
+  ssl: {rejectUnauthorized:false}
 });

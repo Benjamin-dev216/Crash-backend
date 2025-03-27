@@ -61,6 +61,8 @@ export const startGame = async (io: Server) => {
   }, updateInterval);
 };
 
+// When game ends all amount calculations are done, So you can add api call here
+
 const endGame = async (crashPoint: number, io: Server) => {
   io.emit("gameEnd", { crashPoint });
   io.emit("cashoutDisabled", true);
