@@ -20,7 +20,7 @@ export const startGame = async (io: Server) => {
 
   // ✅ Create and save a new round before using it
   currentRound = new RoundEntity();
-  currentRound.crashPoint = parseFloat((Math.random() * 10 + 1).toFixed(4));
+  currentRound.crashPoint = generateCrashPoint();
 
   try {
     currentRound = await roundRepository.save(currentRound); // ✅ Save round in DB
@@ -313,3 +313,21 @@ export const fetchHistory = async (
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+function generateCrashPoint(): number {
+  const r = Math.random();
+
+  if (r < 0.01) {
+    return 1.00; // Instant crash
+  }
+
+  if (r < 0.81) {
+    // 80% chance: 1.01x - 3.00x
+    return parseFloat((Math.random() * (3.0 - 1.01) + 1.01).toFixed(2));
+  } else {
+    // 19% chance: 3.01x - 100x, skewed to be mostly lower
+    const base = Math.random();
+    const crash = 3.01 + Math.pow(1 - base, 2) * (100 - 3.01);
+    return parseFloat(crash.toFixed(2));
+  }
+}
