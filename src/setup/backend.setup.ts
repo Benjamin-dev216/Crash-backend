@@ -5,11 +5,9 @@ import cors from "cors";
 import router from "@/routers";
 import { createServer } from "http";
 import { Logger } from "@/utils";
-import { clientUse } from "valid-ip-scope";
 import {
   authMiddleware,
   errorHandlerMiddleware,
-  routeMiddleware,
 } from "@/middlewares";
 import { startGame } from "@/controllers/game.controller";
 import { setupSocket } from "@/utils/socket";
