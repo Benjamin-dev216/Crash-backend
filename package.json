@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "private":true,
   "scripts": {
-    "dev": "npx nodemon src/index.ts",
+    "start": "npx nodemon src/index.ts",
     "db:seed": "ts-node src/seeds/user.seeder.ts",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "dev": "concurrently \"yarn workspace server start\" \"yarn workspace client dev\"",
+    "build": "yarn workspace client build"
   },
   "dependencies": {
     "@types/cors": "^2.8.17",
@@ -39,6 +41,7 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.0",
     "nodemon": "^3.1.7",
-    "tsconfig-paths": "^4.2.0"
+    "tsconfig-paths": "^4.2.0",
+    "concurrently": "^8.2.0"
   }
 }
