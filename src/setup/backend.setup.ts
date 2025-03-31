@@ -18,31 +18,37 @@ export const backendSetup = () => {
 
   app.use(cors());
   app.use(express.json());
-  // app.use(clientUse());
-  // app.use([authMiddleware, routeMiddleware]);
+
   app.use("/health", (_req: Request, res: Response) => {
     res.send("It's healthy!");
-  }); //health check
+  });
 
+  // 👇 Serve frontend only in production
   if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(path.join(__dirname, '../client/build')));
-  
-    app.get('*', (req, res) => {
-      res.sendFile(path.resolve(__dirname, '../client/build', 'index.html'));
+    const clientBuildPath = path.resolve(__dirname, '../../../client/dist');
+    app.use(express.static(clientBuildPath));
+  }
+
+  // ✅ Mount API routes before catch-all
+  app.use("/api", router);
+
+  // ✅ Catch-all AFTER API routes
+  if (process.env.NODE_ENV === 'production') {
+    const clientBuildPath = path.resolve(__dirname, '../../../client/dist');
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(clientBuildPath, 'index.html'));
     });
   }
 
-  app.use("/api", router);
-
+  // Error handler
   app.use(errorHandlerMiddleware);
 
   const server = createServer(app);
   const io = setupSocket(server);
 
   const port = process.env.PORT || 4000;
-
   server.listen(port, () => {
-    Logger.info(`Sever is running on ${port}`);
+    Logger.info(`Server is running on port ${port}`);
     startGame(io);
   });
 };

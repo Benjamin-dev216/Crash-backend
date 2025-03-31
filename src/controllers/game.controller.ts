@@ -250,7 +250,7 @@ export const emitUserList = async (io: Server, gameEndFlag: boolean) => {
     }))
     .slice(0, 40);
 
-  const numberOfPlayers = currentRoundBets.length;
+  const numberOfPlayers = currentRoundBets?.length;
 
   const totalBets = currentRoundBets.reduce(
     (sum, bet) => sum + Number(bet.amount || 0),
@@ -280,7 +280,7 @@ export const fetchHistory = async (
   res: Response
 ): Promise<void> => {
   try {
-    const userId = req.params.username;
+    const userId = req.params.userId;
     if (!userId) {
       res.status(400).json({ error: "User name is required" });
     }

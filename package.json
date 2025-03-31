@@ -1,4 +1,7 @@
 {
+  "name": "server",
+  "version": "1.0.0",
+  "private":true,
   "scripts": {
     "dev": "npx nodemon src/index.ts",
     "db:seed": "ts-node src/seeds/user.seeder.ts",
