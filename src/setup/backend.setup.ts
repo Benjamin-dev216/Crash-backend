@@ -3,6 +3,7 @@
 import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import router from "@/routers";
+import path from 'path'
 import { createServer } from "http";
 import { Logger } from "@/utils";
 import {
@@ -22,6 +23,14 @@ export const backendSetup = () => {
   app.use("/health", (_req: Request, res: Response) => {
     res.send("It's healthy!");
   }); //health check
+
+  if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(__dirname, '../client/build')));
+  
+    app.get('*', (req, res) => {
+      res.sendFile(path.resolve(__dirname, '../client/build', 'index.html'));
+    });
+  }
 
   app.use("/api", router);
 
